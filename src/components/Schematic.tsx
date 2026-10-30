@@ -106,7 +106,7 @@ export function Schematic({
           stroke="currentColor"
           strokeWidth="1.5"
         />
-        <text x={x} y={y + 35} textAnchor="middle" className="tiny">
+        <text x={x + 12} y={y + 35} className="tiny">
           {id} · {v.pumpStatus[id]}
         </text>
       </g>,
@@ -157,7 +157,7 @@ export function Schematic({
               </text>
             </g>,
           )}
-          <text x="595" y="84" className="diagram-label transfer-label">
+          <text x="652" y="84" className="diagram-label transfer-label">
             TRANSFER · {fmt(Math.abs(v.transferRate))} kg/h
           </text>
           <Pipe d="M615 185H642V49H568" rate={v.trimRate} kind="transfer" />
@@ -368,7 +368,7 @@ export function Schematic({
                     </text>
                   </g>,
                 )}
-                <text x={x} y="495" textAnchor="middle" className="tiny">
+                <text x={x + 12} y="495" className="tiny">
                   {fmt(v.pressure[side], 1)} psi
                 </text>
               </g>
