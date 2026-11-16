@@ -29,10 +29,10 @@ test("jettison control drives nozzles and lowers real fuel quantity", async ({ p
   await page.getByLabel("Senaryo preset").selectOption("jettison");
   await expect(page.locator(".experiment .panel-head h2")).toHaveText("Jettison");
   await page.getByRole("button", { name: "20×", exact: true }).click();
-  const before = await quantity(page, "L");
+  const before = await quantity(page, "C");
   await page.getByRole("switch", { name: "FUEL JETTISON", exact: true }).click();
   await expect(page.locator(".jettison-plume path")).toHaveCount(4);
-  await expect.poll(() => quantity(page, "L")).toBeLessThan(before - 20);
+  await expect.poll(() => quantity(page, "C")).toBeLessThan(before - 20);
   await page.getByRole("switch", { name: "FUEL JETTISON", exact: true }).click();
   await expect(page.locator(".jettison-plume")).toHaveCount(0);
 });

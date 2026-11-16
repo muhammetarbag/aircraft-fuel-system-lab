@@ -14,6 +14,8 @@ import type {
 export const TANKS: TankId[] = ["L", "C", "R", "T"];
 export const MAINS: MainTank[] = ["L", "C", "R"];
 export const DUMP_TANKS: Side[] = ["L", "R"];
+/** Model value: wing jettison stops at this quantity in each wing tank (kg). */
+export const WING_JETTISON_MIN = 1500;
 export const PUMPS: PumpId[] = ["L1", "L2", "C1", "C2", "R1", "R2"];
 export const CAPACITY = { L: 6000, C: 8000, R: 6000, T: 2000 };
 export const RESIDUAL = { L: 40, C: 30, R: 40, T: 20 };
@@ -247,7 +249,11 @@ export function derive(s: State, dt = 0.2): Snapshot {
         ),
       ) * (c.trim === "aft" ? 1 : -1);
   }
-  const dumpable = DUMP_TANKS.reduce((n, id) => n + usable(s, id), 0);
+  // Center is jettisoned first, through its running pumps; wings only down to the minimum.
+  const centerDump = pumpStatus.C1 === "ON" || pumpStatus.C2 === "ON";
+  const dumpable =
+    (centerDump ? usable(s, "C") : 0) +
+    DUMP_TANKS.reduce((n, id) => n + Math.max(0, s.tanks[id].q - WING_JETTISON_MIN), 0);
   const dumpRate =
     c.jettison && !c.ground
       ? Math.max(
@@ -374,11 +380,15 @@ function take(s: State, id: TankId, requested: number, floor = RESIDUAL[id]): nu
 function move(s: State, from: TankId, to: TankId, amount: number): void {
   s.tanks[to].q += take(s, from, Math.min(amount, CAPACITY[to] - s.tanks[to].q));
 }
-function withdraw(s: State, ids: TankId[], amount: number): number {
-  const sum = ids.reduce((n, id) => n + usable(s, id), 0);
+function withdraw(s: State, ids: TankId[], amount: number, floor?: number): number {
+  const avail = (id: TankId): number => Math.max(0, s.tanks[id].q - (floor ?? RESIDUAL[id]));
+  const sum = ids.reduce((n, id) => n + avail(id), 0);
   return sum <= 0
     ? 0
-    : ids.reduce((n, id) => n + take(s, id, (Math.min(amount, sum) * usable(s, id)) / sum), 0);
+    : ids.reduce(
+        (n, id) => n + take(s, id, (Math.min(amount, sum) * avail(id)) / sum, floor ?? RESIDUAL[id]),
+        0,
+      );
 }
 
 function integrate(s: State, dt: number): void {
@@ -402,22 +412,20 @@ function integrate(s: State, dt: number): void {
       Math.abs(view.trimRate) * hours,
     );
   if (s.faults.leak) s.ledger.leak += take(s, s.faults.leak, view.leakRate * hours, 0);
-  if (view.dumpRate)
-    s.ledger.jettison += withdraw(
-      s,
-      DUMP_TANKS,
-      Math.min(view.dumpRate * hours, Math.max(0, total(s) - c.dumpTarget)),
-    );
+  if (view.dumpRate) {
+    let dump = Math.min(view.dumpRate * hours, Math.max(0, total(s) - c.dumpTarget));
+    if (view.pumpStatus.C1 === "ON" || view.pumpStatus.C2 === "ON") {
+      const center = take(s, "C", dump);
+      s.ledger.jettison += center;
+      dump -= center;
+    }
+    s.ledger.jettison += withdraw(s, DUMP_TANKS, dump, WING_JETTISON_MIN);
+  }
   if (view.serviceRate > 0) {
     let remaining = Math.min(view.serviceRate * hours, Math.max(0, c.refuelTarget - total(s)));
-    // Symmetric wing filling to 4 t each, then center, then remaining wing room.
-    for (const target of [4000, 6000]) {
-      if (target === 6000) {
-        const q = Math.min(remaining, CAPACITY.C - s.tanks.C.q);
-        s.tanks.C.q += q;
-        s.ledger.refuel += q;
-        remaining -= q;
-      }
+    // Wings fill symmetrically to full first; center only receives fuel once both wings are full.
+    {
+      const target = CAPACITY.L;
       const wings: Side[] = s.tanks.L.q <= s.tanks.R.q ? ["L", "R"] : ["R", "L"];
       const low = wings[0],
         high = wings[1];
@@ -436,6 +444,12 @@ function integrate(s: State, dt: number): void {
       for (const side of wings) s.tanks[side].q += shared;
       remaining -= shared * 2;
       s.ledger.refuel += shared * 2;
+    }
+    if (s.tanks.L.q >= CAPACITY.L - 1e-9 && s.tanks.R.q >= CAPACITY.R - 1e-9) {
+      const q = Math.min(remaining, CAPACITY.C - s.tanks.C.q);
+      s.tanks.C.q += q;
+      s.ledger.refuel += q;
+      remaining -= q;
     }
     if (
       total(s) >= c.refuelTarget - 1e-5 ||
@@ -526,7 +540,7 @@ export function why(s: State, topic: string): string {
   if (topic === "transfer")
     return `Transfer komutu ${s.controls.transfer}; pompa ${s.controls.transferPump ? "ON" : "OFF"}, gerçek valf ${v.transferActual ? "OPEN" : "CLOSED"}, akış ${Math.abs(v.transferRate).toFixed(0)} kg/h. Kaynakta usable fuel ve hedefte yer yoksa akış durur.`;
   if (topic === "jettison")
-    return `Ağırlık ${v.weight.toFixed(0)} kg, örnek MLW ${MODEL.landingWeight} kg. Jettison ${v.dumpRate.toFixed(0)} kg/h. Yerde devre dışı; uçuşta ${s.controls.dumpTarget} kg toplam yakıt hedefinde kesilir. Bu hedef yalnız öğretim modeline aittir.`;
+    return `Ağırlık ${v.weight.toFixed(0)} kg, örnek MLW ${MODEL.landingWeight} kg. Jettison ${v.dumpRate.toFixed(0)} kg/h; önce center (center pompası çalışıyorsa), sonra kanatlar ${WING_JETTISON_MIN} kg minimuma kadar. Yerde devre dışı; uçuşta ${s.controls.dumpTarget} kg toplam yakıt hedefinde kesilir. Bu hedef yalnız öğretim modeline aittir.`;
   if (topic === "drain")
     return `Sol tank dibinde ${s.tanks.L.water.toFixed(2)} L su kaldı. Toplanan su ${s.waterDrained.toFixed(2)} L, çıkan yakıt ${s.ledger.drain.toFixed(2)} kg. İdeal çökelme modelinde alttaki su önce çıkar.`;
   return `Sol manifold ${v.manifold.L.toFixed(1)} psi → motor girişi ${v.pressure.L.toFixed(1)} psi; motor talebi ${v.demand.L.toFixed(0)}, ulaşan akış ${v.flow.L.toFixed(0)} kg/h. ${!s.controls.shutoff.L ? "Shutoff kapalı: pompa çıkışında basınç bulunabilir ama motora akış yok." : s.controls.restriction.L > 0.2 ? "Kısıtlama, pompa tarafında basınç varken motor tarafındaki akışı sınırlar." : v.flow.L < v.demand.L ? "Kaynak kapasitesi veya açık besleme yolu talebi karşılamıyor." : "Açık besleme yolu ve pompa kapasitesi talebi karşılıyor."}`;

@@ -55,6 +55,8 @@ export function preset(id: PresetId): State {
     s.tanks.L.q = 4500;
     s.tanks.R.q = 4500;
     s.tanks.C.q = 5000;
+    s.controls.pumps.C1 = true;
+    s.controls.pumps.C2 = true;
   }
   if (id === "trim") {
     s.tanks.C.q = 6000;
@@ -63,6 +65,12 @@ export function preset(id: PresetId): State {
   if (id === "refuel" || id === "defuel" || id === "drain") {
     s.controls.ground = true;
     s.controls.demand = { L: 0, R: 0 };
+  }
+  // Ground loading rule: center fuel only with full wings, so ground presets start center-empty.
+  if (id === "defuel" || id === "drain") {
+    s.tanks.L.q = 5700;
+    s.tanks.R.q = 5700;
+    s.tanks.C.q = 0;
   }
   if (id === "refuel") {
     s.tanks.L.q = 500;
