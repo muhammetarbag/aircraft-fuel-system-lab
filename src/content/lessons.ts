@@ -1,3 +1,4 @@
+import { WING_JETTISON_MIN } from "../sim/engine.ts";
 import type { PresetId } from "../sim/scenarios.ts";
 export interface Lesson {
   title: string;
@@ -152,17 +153,17 @@ export const LESSONS: Lesson[] = [
     english: "Fuel jettison / dumping",
     concept:
       "Jettison, donanımlı uçakta yakıtı dışarı atarak kütleyi azaltır. Her uçakta bulunmaz ve her ağırlık probleminde aynı çözüm uygulanmaz.",
-    role: "Bu modelde iki wing tankına bağlı nozzle vardır; motor feedinden ayrı idealize bir çıkış yolu kullanılır.",
+    role: `Bu modelde önce center tank, çalışan center (override) pompalarıyla atılır; center bitince wing tankları atılır. Wing jettison her kanatta ${WING_JETTISON_MIN} kg model minimumunda durur; iniş ve geri dönüş yakıtı kanatta korunur. Nozzle çıkışı motor feedinden ayrı idealize bir yoldur.`,
     focus: "jettison",
     lab: "jettison",
     preset: "jettison",
     steps: [
       "74.000 kg başlangıç ağırlığını örnek 66.000 kg MLW ile karşılaştır.",
-      "Jettison aç ve 20× hızda nozzle çıkışını izle.",
+      "Jettison aç ve 20× hızda önce center, sonra wing quantity düşüşünü izle.",
       "Hedefte otomatik kesilen akışı ve devam eden engine consumptionı ayır.",
     ],
     interpretation:
-      "Çıkan yakıt ledgerda jettison olarak ayrı sayılır. Buradaki hız, hedef ve MLW bir gerçek uçak prosedürü değildir.",
+      `Çıkan yakıt ledgerda jettison olarak ayrı sayılır. Center pompaları OFF ise center atılamaz, yalnız kanatlar minimuma kadar atılır. Buradaki hız, hedef, ${WING_JETTISON_MIN} kg wing minimumu ve MLW model değerleridir; gerçek uçak prosedürü değildir.`,
   },
   {
     title: "Yakıt tankı inerting",
@@ -209,11 +210,11 @@ export const LESSONS: Lesson[] = [
     preset: "refuel",
     steps: [
       "12.000 kg hedef seç ve refuel başlat.",
-      "Kanatlar → center sırasını ve hedefte durmayı izle.",
+      "Kanatlar tam dolmadan center'a yakıt gitmediğini izle; center dolumunu görmek için hedefi 12.000 kg üstüne çıkar.",
       "Defuel moduna geç; toplam ile ayrı çıkış sayacını karşılaştır.",
     ],
     interpretation:
-      "Bu model önce kanatları simetrik 4000 kg seviyesine, sonra centerı doldurur. Gerçek dolum sırası uçak tipine bağlıdır.",
+      "Bu model kanatları simetrik olarak tam kapasiteye (6000 kg) doldurur, center'ı ancak sonra doldurur: center'da yakıt varsa kanatlar doludur. Yerdeki refuel, defuel ve drain presetleri bu kurala uyar. Uçuş presetleri (Normal Cruise, arıza vakaları, Center Tank Feed, Trim ve Jettison) center'da yakıt varken kanatlar dolu değilken başlar; bu, kaynak seçimini ve center önceliğini göstermek için bilinçli bir öğretim varsayımıdır. Gerçek operasyonda center önce tüketilerek kanatlar dolu tutulur; dolum sırası ve limitler uçak tipine bağlıdır.",
   },
   {
     title: "Abnormal ve emergency",
@@ -406,7 +407,7 @@ export const PARTS: Record<
   jettison: {
     title: "Jettison valve & nozzle",
     function: "Donanımlı uçakta yakıtı dışarı atarak kütleyi azaltır.",
-    input: "Sol ve sağ wing tankları (bu model)",
+    input: "Önce center (çalışan center pompalarıyla), sonra sol ve sağ wing tankları (bu model)",
     output: "Wing nozzles üzerinden dışarı kütle",
     normal: "Kapalı; modelde yerde kilitli ve hedef korumalı.",
     failure: "Gerçek arıza kesilememe/akış kaybı olabilir; burada valf ideal kabul edilir.",

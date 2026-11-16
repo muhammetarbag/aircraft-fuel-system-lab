@@ -1,4 +1,5 @@
 import { Panel } from "./Primitives.tsx";
+import { WING_JETTISON_MIN } from "../sim/engine.ts";
 export function Model() {
   return (
     <div className="model-page">
@@ -42,9 +43,10 @@ export function Model() {
                 kullanılır. Sıvı termal genleşmesi yaklaşık yoğunlukla temsil edilir.
               </li>
               <li>
-                Jettison sol ve sağ wing tanklarından usable miktarlarına orantılı çekilir; center
-                ve trim bu modelde doğrudan dump edilmez. Şemadaki iki nozzle toplam çıkışı temsil
-                eder; boru basınç kayıpları çözülmez.
+                Jettison önce center tanktan, en az bir center pompası çalışıyorsa çekilir; sonra
+                wing tanklarından, her kanatta {WING_JETTISON_MIN} kg model minimumuna kadar. Trim
+                bu modelde doğrudan dump edilmez. Şemadaki iki nozzle toplam çıkışı temsil eder;
+                boru basınç kayıpları çözülmez.
               </li>
               <li>
                 NEA örnek O₂ asimptotu %9; sertifikalı bir limit veya gerçek NGS performansı

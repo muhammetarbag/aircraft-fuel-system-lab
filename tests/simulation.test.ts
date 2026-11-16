@@ -14,6 +14,7 @@ import {
   TANKS,
   total,
   why,
+  WING_JETTISON_MIN,
 } from "../src/sim/engine.ts";
 import { DIAGNOSES, MISSIONS, PRESETS, preset } from "../src/sim/scenarios.ts";
 import { QUESTIONS } from "../src/content/questions.ts";
@@ -256,15 +257,35 @@ test("frozen quantity does not freeze actual fuel or mass ledger", () => {
   assert.ok(n.ledger.burn > 0);
   conserved(n);
 });
-test("jettison decreases wing fuel/aircraft weight with its own ledger", () => {
+test("jettison takes center fuel first and keeps its own ledger", () => {
   const s = still(preset("jettison"));
   s.controls.jettison = true;
   const n = advance(s, 60);
   close(n.ledger.jettison, 1000);
   close(total(s) - total(n), 1000);
-  close(s.tanks.C.q, n.tanks.C.q);
+  close(s.tanks.C.q - n.tanks.C.q, 1000);
+  close(s.tanks.L.q, n.tanks.L.q);
+  close(s.tanks.R.q, n.tanks.R.q);
   close(derive(s).weight - derive(n).weight, 1000);
   conserved(n);
+});
+test("wing jettison follows the empty center and stops at the wing minimum", () => {
+  const s = still(preset("jettison"));
+  s.controls.jettison = true;
+  s.controls.dumpTarget = 0;
+  const n = advance(s, 1200);
+  close(n.tanks.C.q, RESIDUAL.C);
+  close(n.tanks.L.q, WING_JETTISON_MIN);
+  close(n.tanks.R.q, WING_JETTISON_MIN);
+  close(derive(n).dumpRate, 0);
+  conserved(n);
+  const off = still(preset("jettison"));
+  off.controls.pumps.C1 = off.controls.pumps.C2 = false;
+  off.controls.jettison = true;
+  const m = advance(off, 60);
+  close(m.tanks.C.q, off.tanks.C.q);
+  close(off.tanks.L.q - m.tanks.L.q, 500);
+  conserved(m);
 });
 test("jettison reaches target without overshoot and is inhibited on ground", () => {
   let s = still(preset("jettison"));
@@ -315,6 +336,30 @@ test("refuel reaches exact target, respects capacity and fills wings symmetrical
   s = advance(s, 900);
   close(total(s), 20000);
   conserved(s);
+});
+test("refuel fills both wings before any center fuel", () => {
+  let s = preset("refuel");
+  s.controls.refuelTarget = 16000;
+  s.controls.service = "refuel";
+  for (let i = 0; i < 90; i++) {
+    s = advance(s, 10);
+    if (s.tanks.C.q > 1e-9) {
+      close(s.tanks.L.q, CAPACITY.L);
+      close(s.tanks.R.q, CAPACITY.R);
+    }
+  }
+  close(total(s), 16000);
+  close(s.tanks.C.q, 4000);
+  conserved(s);
+});
+test("ground presets respect the center-only-with-full-wings loading rule", () => {
+  for (const id of ["refuel", "defuel", "drain"] as const) {
+    const s = preset(id);
+    if (s.tanks.C.q > 0) {
+      close(s.tanks.L.q, CAPACITY.L);
+      close(s.tanks.R.q, CAPACITY.R);
+    }
+  }
 });
 test("defuel is a separate mass exit and cannot cross residuals", () => {
   const s = preset("defuel");
